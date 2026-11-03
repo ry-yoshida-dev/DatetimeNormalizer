@@ -131,6 +131,8 @@ class TimeZoneReader:
             "ct": "America/Chicago",
             "mt": "America/Denver",
             "pt": "America/Los_Angeles",
+            # An old IANA name, which some systems leave out of their time zone database.
+            "japan": "Asia/Tokyo",
             "米国東部時間": "America/New_York",
             "米国中部時間": "America/Chicago",
             "米国山岳部時間": "America/Denver",

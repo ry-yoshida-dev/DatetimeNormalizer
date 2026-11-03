@@ -90,6 +90,8 @@ A fraction of a second beyond microseconds is truncated.
 Offsets and abbreviations need nothing else. IANA names and names of regions read the time zone
 database of the system. Where there is none, as on Windows and in slim containers, install
 [`tzdata`](https://pypi.org/project/tzdata/); without it those names are rejected as unknown.
+Old IANA names such as `US/Eastern` may also be missing, as Ubuntu moves them to `tzdata-legacy`, so
+prefer current names such as `America/New_York`. `Japan` is always read, as `Asia/Tokyo`.
 
 - **Abbreviations are fixed offsets**, as written: `EST` is -05:00 even in July. Names of regions
   follow daylight saving time: `America/New_York`, `ET`, and `米国東部時間` are -04:00 in July.

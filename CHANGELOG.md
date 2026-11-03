@@ -36,3 +36,4 @@ the API.
 - `to_time_zone` and `to_utc` read names with the `zone_abbreviations` of the normalizer.
 - A long run of spaces no longer makes normalizing take quadratic time.
 - `to_time_zone` raises `InvalidDatetimeError` for a `tzinfo` without an offset.
+- `Japan` is read on systems whose time zone database leaves out old IANA names.
