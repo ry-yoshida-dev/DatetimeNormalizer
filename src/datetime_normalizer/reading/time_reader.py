@@ -1,39 +1,41 @@
 import re
-from datetime import UTC, timedelta, timezone
 from typing import ClassVar
 
 from datetime_normalizer.errors import InvalidDatetimeError, UnrecognizedDatetimeError
 from datetime_normalizer.reading.meridiem import Meridiem
 from datetime_normalizer.reading.time import TimeReading
+from datetime_normalizer.reading.time_zone_reader import TimeZoneReader
 
 
 class TimeReader:
-    """Read the time and time zone that follow a date in canonical text."""
+    """
+    Read the time and time zones that follow a date in canonical text.
+
+    Parameters
+    ----------
+    time_zone_reader : TimeZoneReader
+        Reader of the time zones in the text.
+    """
 
     _MAX_HOUR: ClassVar[int] = 47
     _MICROSECOND_DIGIT_COUNT: ClassVar[int] = 6
-    _JST: ClassVar[timezone] = timezone(timedelta(hours=9))
-    # The offsets in use. Anything beyond is more likely the end of a range: 13:00-15:00.
-    _MIN_OFFSET: ClassVar[timedelta] = timedelta(hours=-12)
-    _MAX_OFFSET: ClassVar[timedelta] = timedelta(hours=14)
-    _NAMED_ZONES: ClassVar[dict[str, timezone]] = {
-        "z": UTC,
-        "utc": UTC,
-        "gmt": UTC,
-        "jst": _JST,
-        "日本時間": _JST,
-    }
-
     _SEPARATOR: ClassVar[str] = r"(?:t|,?\s*)"
+    # The zone may come first: 日本時間午後1時. Lazy, to leave 午後 to the meridiem.
+    _LEADING_ZONE: ClassVar[str] = (
+        r"(?:\(?(?P<leading_zone>(?!午前|午後|(?:am|pm)(?![a-z]))"
+        + rf"(?:[a-z][a-z0-9_+/-]*?|{TimeZoneReader.JAPANESE_NAME}?))\)?\s*)?"
+    )
     _LEADING_MERIDIEM: ClassVar[str] = r"(?:(?P<leading_meridiem>午前|午後|am|pm)\s*)?"
-    _TRAILING_MERIDIEM: ClassVar[str] = r"(?:\s*(?P<trailing_meridiem>am|pm))?"
+    _TRAILING_MERIDIEM: ClassVar[str] = r"(?:\s*(?P<trailing_meridiem>am|pm)(?![a-z]))?"
+    # A second zone is a note on the first: +09:00[Asia/Tokyo], GMT+0900 (日本標準時).
     _ZONE: ClassVar[str] = (
-        r"(?:\s*(?:(?P<zone_name>z|utc|gmt|jst|日本時間)"
-        + r"|(?:utc|gmt)?\s*(?P<sign>[-+])(?P<zone_hour>\d{1,2})(?::?(?P<zone_minute>\d{2}))?))?"
+        rf"(?:\s*(?P<zone>{TimeZoneReader.PATTERN}))?"
+        + rf"(?:\s*[\[(]!?(?P<noted_zone>{TimeZoneReader.PATTERN})[\])])?"
     )
     _PATTERNS: ClassVar[tuple[re.Pattern[str], ...]] = (
         re.compile(
             _SEPARATOR
+            + _LEADING_ZONE
             + _LEADING_MERIDIEM
             + r"(?P<hour>\d{1,2}):(?P<minute>\d{2})"
             + r"(?::(?P<second>\d{2})(?:[.,](?P<fraction>\d+))?)?"
@@ -42,6 +44,7 @@ class TimeReader:
         ),
         re.compile(
             _SEPARATOR
+            + _LEADING_ZONE
             + _LEADING_MERIDIEM
             + r"(?P<hour>\d{1,2})時"
             + r"(?:(?P<half>半)|(?P<minute>\d{1,2})分"
@@ -49,17 +52,25 @@ class TimeReader:
             + _TRAILING_MERIDIEM
             + _ZONE
         ),
-        re.compile(_SEPARATOR + r"(?P<hour>\d{1,2})\s*(?P<trailing_meridiem>am|pm)" + _ZONE),
         re.compile(
             _SEPARATOR
+            + _LEADING_ZONE
+            + r"(?P<hour>\d{1,2})\s*(?P<trailing_meridiem>am|pm)(?![a-z])"
+            + _ZONE
+        ),
+        re.compile(
+            _SEPARATOR
+            + _LEADING_ZONE
             + r"(?P<hour>\d{2})(?:(?P<minute>\d{2})"
             + r"(?:(?P<second>\d{2})(?:[.,](?P<fraction>\d+))?)?)?"
             + _ZONE
         ),
     )
 
-    @classmethod
-    def read(cls, text: str) -> TimeReading:
+    def __init__(self, time_zone_reader: TimeZoneReader) -> None:
+        self._time_zone_reader: TimeZoneReader = time_zone_reader
+
+    def read(self, text: str) -> TimeReading:
         """
         Read and validate a time.
 
@@ -76,14 +87,15 @@ class TimeReader:
         Raises
         ------
         UnrecognizedDatetimeError
-            If the text is not a supported time, including one with two 12-hour markers.
+            If the text is not a supported time, including one with two 12-hour markers, or
+            a time zone is unknown.
         AmbiguousDatetimeError
             If the time is 12 o'clock on the Japanese 12-hour clock.
         InvalidDatetimeError
             If the time or the time zone offset does not exist.
         """
         match: re.Match[str] | None = next(
-            filter(None, (pattern.fullmatch(text) for pattern in cls._PATTERNS)), None
+            filter(None, (pattern.fullmatch(text) for pattern in self._PATTERNS)), None
         )
         if match is None:
             raise UnrecognizedDatetimeError(f"No supported time in: {text}")
@@ -96,19 +108,23 @@ class TimeReader:
         if (minute or 0) > 59 or (second or 0) > 59:
             raise InvalidDatetimeError(f"Minute or second out of range in: {text}")
         return TimeReading(
-            hour=cls._read_hour(groups),
+            hour=self._read_hour(groups),
             minute=minute,
             second=second,
             microsecond=(
                 int(
-                    fraction[: cls._MICROSECOND_DIGIT_COUNT].ljust(
-                        cls._MICROSECOND_DIGIT_COUNT, "0"
+                    fraction[: self._MICROSECOND_DIGIT_COUNT].ljust(
+                        self._MICROSECOND_DIGIT_COUNT, "0"
                     )
                 )
                 if fraction
                 else None
             ),
-            time_zone=cls._read_zone(groups),
+            time_zones=tuple(
+                self._time_zone_reader.read(zone)
+                for zone in (groups.get("leading_zone"), groups["zone"], groups["noted_zone"])
+                if zone is not None
+            ),
         )
 
     @classmethod
@@ -126,17 +142,3 @@ class TimeReader:
         if hour > cls._MAX_HOUR:
             raise InvalidDatetimeError(f"Hour out of range: {hour}")
         return hour
-
-    @classmethod
-    def _read_zone(cls, groups: dict[str, str | None]) -> timezone | None:
-        zone_name, sign, zone_hour = groups["zone_name"], groups["sign"], groups["zone_hour"]
-        if zone_name is not None:
-            return cls._NAMED_ZONES[zone_name]
-        if sign is None or zone_hour is None:
-            return None
-        hours, minutes = int(zone_hour), int(groups["zone_minute"] or 0)
-        magnitude: timedelta = timedelta(hours=hours, minutes=minutes)
-        offset: timedelta = -magnitude if sign == "-" else magnitude
-        if minutes > 59 or not cls._MIN_OFFSET <= offset <= cls._MAX_OFFSET:
-            raise InvalidDatetimeError(f"Time zone offset out of range: {sign}{hours}:{minutes}")
-        return timezone(offset)
