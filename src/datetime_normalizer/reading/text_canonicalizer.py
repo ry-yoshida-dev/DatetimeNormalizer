@@ -8,7 +8,9 @@ from datetime_normalizer.reading.kanji_numeral_converter import KanjiNumeralConv
 class TextCanonicalizer:
     """Remove character-level differences so that readers only deal with one spelling."""
 
-    _DASH_TABLE: ClassVar[dict[int, str]] = str.maketrans(dict.fromkeys("‐‑‒–—―−ー", "-"))
+    _PUNCTUATION_TABLE: ClassVar[dict[int, str]] = str.maketrans(
+        {**dict.fromkeys("‐‑‒–—―−ー", "-"), "、": ","}
+    )
     _SPACE_AROUND_UNIT_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"\s*([年月日時分秒半])\s*")
     _SPACE_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"\s+")
 
@@ -18,7 +20,7 @@ class TextCanonicalizer:
         Canonicalize characters of a text.
 
         NFKC folds full-width characters and era ligatures such as ㋿. Letters become lower
-        case, dashes become ``-``, and kanji numerals and 元 become digits.
+        case, dashes become ``-``, ``、`` becomes ``,``, and kanji numerals and 元 become digits.
 
         Parameters
         ----------
@@ -30,7 +32,7 @@ class TextCanonicalizer:
         str
             The canonical text.
         """
-        folded: str = unicodedata.normalize("NFKC", text).lower().translate(cls._DASH_TABLE)
+        folded: str = unicodedata.normalize("NFKC", text).lower().translate(cls._PUNCTUATION_TABLE)
         spelled: str = (
             KanjiNumeralConverter.convert(folded)
             .replace("元", "1")
@@ -38,5 +40,6 @@ class TextCanonicalizer:
             .replace("a.m.", "am")
             .replace("p.m.", "pm")
         )
-        tight: str = cls._SPACE_AROUND_UNIT_PATTERN.sub(r"\1", spelled)
-        return cls._SPACE_PATTERN.sub(" ", tight).strip()
+        # Spaces collapse first, so that the unit pattern does not rescan a long run of them.
+        spaced: str = cls._SPACE_PATTERN.sub(" ", spelled)
+        return cls._SPACE_AROUND_UNIT_PATTERN.sub(r"\1", spaced).strip()

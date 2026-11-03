@@ -1,8 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, tzinfo
 
-from datetime_normalizer.datetime_precision import DatetimePrecision
-from datetime_normalizer.errors import InvalidDatetimeError
+from datetime_normalizer.errors import AmbiguousDatetimeError, InvalidDatetimeError
+from datetime_normalizer.precision import DatetimePrecision
 from datetime_normalizer.reading import TimeZoneReader
 
 
@@ -18,10 +18,16 @@ class NormalizedDatetime:
         January 1 at midnight. It is naive unless the text or the caller states a time zone.
     precision : DatetimePrecision
         Smallest unit stated in the text.
+    time_zone_reader : TimeZoneReader
+        Reader of time zone names given to ``to_time_zone``. ``DatetimeNormalizer`` passes its
+        own, so that a name means the same when reading and when converting.
     """
 
     value: datetime
     precision: DatetimePrecision
+    time_zone_reader: TimeZoneReader = field(
+        default_factory=TimeZoneReader, repr=False, compare=False, kw_only=True
+    )
 
     @property
     def is_timezone_aware(self) -> bool:
@@ -41,27 +47,38 @@ class NormalizedDatetime:
         Returns
         -------
         NormalizedDatetime
-            The moment in the target. A naive value is taken to be in UTC. The precision grows
-            when the units below it stop being zero, so ``13時`` in JST is ``09:30`` in India,
-            not ``09``, and a date without a time gets an hour.
+            The moment in the target. The precision grows when the units below it stop being
+            zero, so ``13時`` in JST is ``09:30`` in India, not ``09``, and a date without a time
+            gets an hour.
 
         Raises
         ------
         UnrecognizedDatetimeError
             If the name of the target is unknown.
+        AmbiguousDatetimeError
+            If the value is naive, so that it is not a moment yet.
         InvalidDatetimeError
             If the offset of the target does not exist, or the moment is out of the range of
             ``datetime`` there.
         """
-        target: tzinfo = TimeZoneReader().resolve(time_zone)
-        aware: datetime = self.value if self.is_timezone_aware else self.value.replace(tzinfo=UTC)
+        target: tzinfo = self.time_zone_reader.resolve(time_zone)
+        if not self.is_timezone_aware:
+            raise AmbiguousDatetimeError(
+                f"No time zone to convert from; set default_time_zone: {self.isoformat()}"
+            )
+        if target.utcoffset(self.value) is None:
+            raise InvalidDatetimeError(f"Time zone without an offset: {target}")
         try:
-            converted: datetime = aware.astimezone(target)
+            converted: datetime = self.value.astimezone(target)
         except OverflowError as error:
             raise InvalidDatetimeError(
                 f"Moment out of range in {target}: {self.isoformat()}"
             ) from error
-        return NormalizedDatetime(value=converted, precision=self.precision.refined_for(converted))
+        return NormalizedDatetime(
+            value=converted,
+            precision=self.precision.refined_for(converted),
+            time_zone_reader=self.time_zone_reader,
+        )
 
     def to_utc(self) -> "NormalizedDatetime":
         """
@@ -70,10 +87,12 @@ class NormalizedDatetime:
         Returns
         -------
         NormalizedDatetime
-            The moment in UTC. A naive value is taken to be in UTC already.
+            The moment in UTC.
 
         Raises
         ------
+        AmbiguousDatetimeError
+            If the value is naive, so that it is not a moment yet.
         InvalidDatetimeError
             If the moment is out of the range of ``datetime`` in UTC.
         """

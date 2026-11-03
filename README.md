@@ -33,13 +33,13 @@ normalizer.normalize("2024-01-05 13:05", default_time_zone="Asia/Tokyo").isoform
 
 - **Never guess at a date.** Text with several plausible readings raises an error, because a
   wrong guess silently corrupts data while an error can be handled.
-- **Always read a time zone.** Its ambiguities have fixed readings, listed under
-  [Time zones](#time-zones), so a batch does not stop on them. Check those readings against your
-  data.
+- **Always read a stated time zone.** The ambiguities of its name have fixed readings, listed
+  under [Time zones](#time-zones), so a batch does not stop on them. Check those readings against
+  your data.
 - **Keep the precision.** `2024年1月` stays a month: `isoformat()` gives `2024-01`, and
   `precision` tells what `value` can be trusted for.
 - **Do not invent a time zone.** The result is naive unless the text states a zone or the caller
-  passes `default_time_zone`.
+  passes `default_time_zone`, and a naive result cannot be converted.
 
 ## Setup
 
@@ -68,20 +68,21 @@ Full-width characters, kanji numerals, spacing around units, and letter case are
 | 12-hour clock | `午後1時`, `午前9:30`, `1:30 PM`, `1 p.m.` |
 | Offset | `Z`, `+09:00`, `+0900`, `+9`, `UTC+9`, `GMT-05:00`, `+09:18:59` |
 | IANA time zone | `Asia/Tokyo`, `america/new_york`, `Etc/GMT+9`, `Japan` |
-| Abbreviation | `UTC`, `GMT`, `JST`, `KST`, `HKT`, `SGT`, `EST`, `EDT`, `PDT`, `CET`, `CEST`, `AEST`, `NZST`, and others in [time_zone_reader.py](src/datetime_normalizer/reading/time_zone_reader.py); `ET`, `CT`, `MT`, `PT` |
+| Abbreviation | `UTC`, `GMT`, `JST`, `KST`, `HKT`, `SGT`, `EST`, `EDT`, `PDT`, `CET`, `CEST`, `AEST`, `NZST`, and others in [time_zone.py](src/datetime_normalizer/reading/time_zone.py); `ET`, `CT`, `MT`, `PT` |
 | Japanese time zone | `日本時間`, `日本標準時`, `協定世界時`, `世界標準時`, `世界時`, `世界時間`, `グリニッジ標準時`, `東部標準時`, `米国東部時間`, `ロンドン時間`, `シンガポール時間` |
 | Zone before the time | `日本時間午後1時`, `(日本時間)13:05`, `UTC 13:05` |
 | Unix time | `1704427200`, `1704427200.5`, `1704427200000` (milliseconds); always UTC |
 | Zone as a note | `+09:00[Asia/Tokyo]`, `+0900 (JST)`, `GMT+0900 (日本標準時)`, `13時(日本時間)` |
+| Zone after a date | `2024-01-05 JST`, `2024-01-05+09:00`, `2024-01-05Z`, `2024年1月5日(日本時間)` |
 
-A time needs a full date. An hour from 24 to 47 belongs to the next day (`24:00`, `25時`).
+A time or a zone needs a full date. An hour from 24 to 47 belongs to the next day (`24:00`, `25時`).
 A fraction of a second beyond microseconds is truncated.
 
 ## Time zones
 
 | API | Description |
 | --- | --- |
-| `result.to_time_zone(zone)` | The same moment in `zone`, a `tzinfo` or text in any notation above |
+| `result.to_time_zone(zone)` | The same moment in `zone`, a `tzinfo` or text in any notation above, read with the `zone_abbreviations` of the normalizer |
 | `result.to_utc()` | The same moment in UTC |
 | `normalize(text, default_time_zone=zone)` | The zone of a text that does not state one |
 | `DatetimeNormalizer(zone_abbreviations={...})` | Readings of names, which override the built-in ones |
@@ -115,8 +116,11 @@ database of the system. Where there is none, as on Windows and in slim container
   `-04:00`. An offset selects the later one: `2024-11-03 01:30-05:00[America/New_York]`.
 - **Several zones in one text** that disagree are a conversion from the first to the last:
   `13:05+08:00[Asia/Tokyo]` is `14:05+09:00`, and `13:05Z[Asia/Tokyo]` is `22:05+09:00`.
-- **A naive value is taken to be in UTC** when converted. Pass `default_time_zone` when it is not.
-  That option also applies to a date without a time, which then means midnight in that zone.
+- **A naive value cannot be converted**, as it is not a moment yet: `to_time_zone` and `to_utc`
+  raise `AmbiguousDatetimeError`. Pass `default_time_zone`, which also applies to a date without
+  a time, which then means midnight in that zone.
+- **A date with a zone** means midnight in that zone, like one with `default_time_zone`, and
+  keeps the precision of a day until it is converted.
 - **The precision grows when a time moves**: `13時` in JST is `09:30` in India, not `09`. A date
   without a time gets an hour when converted.
 - **`世界時` and `世界時間`** are read as UTC. Strictly, 世界時 is UT1, up to 0.9 seconds away.
@@ -132,8 +136,9 @@ Every error derives from `DatetimeNormalizationError`, which is a `ValueError`.
 | Error | Raised for |
 | --- | --- |
 | `UnrecognizedDatetimeError` | No supported notation: `昨日`, `13:05`, `2024-01-05 13:05 Mars/Olympus` |
-| `AmbiguousDatetimeError` | Several readings: `1/2/2024` without `date_order`, `1月5日` without `default_year`, `24/1/5`, `24年1月5日`, `午後12時` |
-| `InvalidDatetimeError` | Cannot exist: `2023-02-29`, `平成31年5月1日`, `明治5年12月31日`, `2024年1月5日(月)`, `13:00-15:00`, `13:05+25:00` |
+| `AmbiguousDatetimeError` | Several readings: `1/2/2024` without `date_order`, `1月5日` without `default_year`, `24/1/5`, `24年1月5日`, `午後12時`, `2024-01-05 10:00-11:00`; or converting a naive value |
+| `InvalidDatetimeError` | Cannot exist: `2023-02-29`, `平成31年5月1日`, `明治5年12月31日`, `2024年1月5日(月)`, `13:05+25:00` |
+| `InvalidConfigurationError` | An argument of `DatetimeNormalizer` cannot be used: `zone_abbreviations={"my zone": UTC}` |
 
 Some of these rules are less obvious:
 
@@ -143,9 +148,10 @@ Some of these rules are less obvious:
   noon in common use. `12:30 PM` and `正午` are accepted, as they have one reading.
 - **Meiji 1 to 5** are rejected. Those dates are on the lunisolar calendar, which cannot be
   converted by arithmetic.
-- **Time zone offsets** outside -12:00 to +14:00 are rejected, which catches ranges such as
-  `13:00-15:00`. A range within them, such as `09:00-12:00`, cannot be told from a negative
-  offset and is read as one, so split ranges before normalizing.
+- **Negative offsets** look like the end of a range, so `10:00-11:00` is rejected. Show that it
+  is an offset with a `T` (`2024-01-05T10:00-11:00`), seconds on the time
+  (`2024-01-05 10:00:00-11:00`), a prefix (`10:00 UTC-11:00`), or a note
+  (`10:00-11:00[Pacific/Pago_Pago]`). Offsets outside -12:00 to +14:00 are always rejected.
 - **Two 12-hour markers**, as in `午前1:30 PM`, are rejected, even when they agree.
 - **`default_year`** is only used when the text states no year, and the date is validated in
   that year: `2月29日` needs a leap year, and `1月5日(月)` must fall on a Monday in it. The year
@@ -170,6 +176,7 @@ Relative text such as `昨日` is not supported.
 ```bash
 uv sync
 uv run pytest
+uv run pytest --doctest-modules src
 uv run ruff check . && uv run ruff format --check .
 uv run mypy src tests
 uv run basedpyright

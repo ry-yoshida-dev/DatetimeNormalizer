@@ -2,9 +2,8 @@ from collections.abc import Mapping
 from datetime import date, datetime, timedelta, tzinfo
 
 from datetime_normalizer.date_order import DateOrder
-from datetime_normalizer.datetime_precision import DatetimePrecision
 from datetime_normalizer.errors import InvalidDatetimeError, UnrecognizedDatetimeError
-from datetime_normalizer.normalized_datetime import NormalizedDatetime
+from datetime_normalizer.precision import DatetimePrecision
 from datetime_normalizer.reading import (
     DateReader,
     DateReading,
@@ -17,6 +16,7 @@ from datetime_normalizer.reading import (
     WeekdayExtraction,
     WeekdayExtractor,
 )
+from datetime_normalizer.result import NormalizedDatetime
 
 
 class DatetimeNormalizer:
@@ -39,7 +39,7 @@ class DatetimeNormalizer:
 
     Raises
     ------
-    UnrecognizedDatetimeError
+    InvalidConfigurationError
         If a key of ``zone_abbreviations`` cannot appear in text as a time zone name.
 
     Examples
@@ -79,7 +79,7 @@ class DatetimeNormalizer:
         Parameters
         ----------
         text : str
-            A date, optionally followed by a time and time zone.
+            A date, optionally followed by a time, a time zone, or both.
         default_year : int | None
             Year of a date that does not state one, such as ``1月5日``. A year in the text takes
             precedence. With ``None``, those dates raise ``AmbiguousDatetimeError``.
@@ -95,7 +95,8 @@ class DatetimeNormalizer:
         Raises
         ------
         UnrecognizedDatetimeError
-            If the text follows no supported notation, including a time without a full date.
+            If the text follows no supported notation, including a time or a time zone without
+            a full date.
         AmbiguousDatetimeError
             If the text has several plausible readings.
         InvalidDatetimeError
@@ -108,16 +109,21 @@ class DatetimeNormalizer:
         unix_time: datetime | None = UnixTimeReader.read(canonical_text)
         if unix_time is not None:
             return NormalizedDatetime(
-                value=unix_time, precision=DatetimePrecision.SECOND.refined_for(unix_time)
+                value=unix_time,
+                precision=DatetimePrecision.SECOND.refined_for(unix_time),
+                time_zone_reader=self._time_zone_reader,
             )
         extraction: WeekdayExtraction = WeekdayExtractor.extract(canonical_text)
         date_reading: DateReading = self._date_reader.read(extraction.text, default_year)
+        date_time_zones: tuple[tzinfo, ...] = self._time_reader.read_time_zones(date_reading.rest)
         time_reading: TimeReading | None = (
-            self._time_reader.read(date_reading.rest) if date_reading.rest else None
+            self._time_reader.read(date_reading.rest)
+            if date_reading.rest and not date_time_zones
+            else None
         )
 
-        if time_reading is not None and date_reading.day is None:
-            raise UnrecognizedDatetimeError(f"A time needs a full date: {text}")
+        if date_reading.day is None and (time_reading is not None or date_time_zones):
+            raise UnrecognizedDatetimeError(f"A time or time zone needs a full date: {text}")
         calendar_day: date = date(date_reading.year, date_reading.month or 1, date_reading.day or 1)
         if extraction.weekday is not None:
             if date_reading.day is None:
@@ -126,25 +132,34 @@ class DatetimeNormalizer:
                 raise InvalidDatetimeError(
                     f"{calendar_day} is not a {extraction.weekday.name.lower()}: {text}"
                 )
-        value: datetime = self._to_datetime(calendar_day, time_reading, fallback_time_zone, text)
+        stated_time_zones: tuple[tzinfo, ...] = (
+            date_time_zones if time_reading is None else time_reading.time_zones
+        )
+        value: datetime = self._to_datetime(
+            calendar_day,
+            time_reading,
+            stated_time_zones or (() if fallback_time_zone is None else (fallback_time_zone,)),
+            text,
+        )
         precision: DatetimePrecision = self._to_precision(date_reading, time_reading)
+        # A time moved by its time zone may need units the text did not state.
+        is_moved: bool = time_reading is not None or value.time() != datetime.min.time()
         return NormalizedDatetime(
             value=value,
-            # A time moved by its time zone may need units the text did not state.
-            precision=precision if time_reading is None else precision.refined_for(value),
+            precision=precision.refined_for(value) if is_moved else precision,
+            time_zone_reader=self._time_zone_reader,
         )
 
     @staticmethod
     def _to_datetime(
         calendar_day: date,
         time_reading: TimeReading | None,
-        fallback_time_zone: tzinfo | None,
+        time_zones: tuple[tzinfo, ...],
         text: str,
     ) -> datetime:
         if time_reading is None:
             return TimeZoneLocalizer.localize(
-                datetime.combine(calendar_day, datetime.min.time()),
-                () if fallback_time_zone is None else (fallback_time_zone,),
+                datetime.combine(calendar_day, datetime.min.time()), time_zones
             )
         days_carried, hour = divmod(time_reading.hour, 24)
         # An hour past midnight is on the next day, as in 24:00 and 25時.
@@ -159,9 +174,7 @@ class DatetimeNormalizer:
             time_reading.second or 0,
             time_reading.microsecond or 0,
         ) + timedelta(days=days_carried)
-        if time_reading.time_zones or fallback_time_zone is None:
-            return TimeZoneLocalizer.localize(wall_clock, time_reading.time_zones)
-        return TimeZoneLocalizer.localize(wall_clock, (fallback_time_zone,))
+        return TimeZoneLocalizer.localize(wall_clock, time_zones)
 
     @staticmethod
     def _to_precision(

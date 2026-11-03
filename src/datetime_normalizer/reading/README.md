@@ -16,12 +16,12 @@ with regular expressions, so text that fits no notation fails instead of being g
 | [kanji_numeral_converter.py](kanji_numeral_converter.py) | `KanjiNumeralConverter`: positional and unit-based kanji numerals to digits |
 | [weekday_extractor.py](weekday_extractor.py) | `WeekdayExtractor`: takes the Japanese or English weekday out of the text |
 | [weekday_extraction.py](weekday_extraction.py) | `WeekdayExtraction`: the weekday and the remaining text |
-| [date_reader.py](date_reader.py) | `DateReader`: date notations, calendar validation, and era ranges |
-| [date.py](date.py) | `DateReading`: the date and the text after it |
-| [time_reader.py](time_reader.py) | `TimeReader`: clock and Japanese time notations, and where time zones are written |
-| [time.py](time.py) | `TimeReading`: the time and its time zones |
-| [time_zone_reader.py](time_zone_reader.py) | `TimeZoneReader`: offsets, abbreviations, IANA names, and Japanese names |
+| [date.py](date.py) | `DateReader`: date notations, calendar validation, and era ranges |
+| [date_result.py](date_result.py) | `DateReading`: the date and the text after it |
+| [time.py](time.py) | `TimeReader`: clock and Japanese time notations, and where time zones are written |
+| [time_result.py](time_result.py) | `TimeReading`: the time and its time zones |
+| [time_zone.py](time_zone.py) | `TimeZoneReader`: offsets, abbreviations, IANA names, and Japanese names |
 | [time_zone_localizer.py](time_zone_localizer.py) | `TimeZoneLocalizer`: attaches time zones, settling times skipped or repeated by daylight saving time and zones that disagree |
-| [unix_time_reader.py](unix_time_reader.py) | `UnixTimeReader`: seconds and milliseconds since 1970 |
+| [unix_time.py](unix_time.py) | `UnixTimeReader`: seconds and milliseconds since 1970 |
 | [japanese_era.py](japanese_era.py) | `JapaneseEra`: era names, year conversion, and first and last days |
 | [meridiem.py](meridiem.py) | `Meridiem`: conversion from English and Japanese 12-hour clocks |

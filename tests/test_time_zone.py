@@ -1,4 +1,6 @@
 from datetime import UTC, date, datetime, time, timedelta, timezone, tzinfo
+from time import perf_counter
+from typing import override
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -6,8 +8,10 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from datetime_normalizer import (
+    AmbiguousDatetimeError,
     DatetimeNormalizer,
     DatetimePrecision,
+    InvalidConfigurationError,
     InvalidDatetimeError,
     NormalizedDatetime,
     UnrecognizedDatetimeError,
@@ -243,8 +247,24 @@ def test_zone_abbreviations_override_built_in_names() -> None:
     assert normalizer.normalize("2024年1月5日 現地時間13時").isoformat() == "2024-01-05T13+07:00"
 
 
+def test_zone_abbreviations_apply_when_converting() -> None:
+    normalizer: DatetimeNormalizer = DatetimeNormalizer(
+        zone_abbreviations={"CST": ZoneInfo("Asia/Shanghai")}
+    )
+    moment: NormalizedDatetime = normalizer.normalize("2024-01-05 13:05 UTC")
+
+    assert moment.to_time_zone("CST").isoformat() == "2024-01-05T21:05+08:00"
+    assert moment.to_utc().to_time_zone("CST").isoformat() == "2024-01-05T21:05+08:00"
+    assert normalizer.normalize("1704427200").to_time_zone("CST").isoformat() == (
+        "2024-01-05T12:00:00+08:00"
+    )
+    assert NORMALIZER.normalize("2024-01-05 13:05 UTC").to_time_zone("CST").isoformat() == (
+        "2024-01-05T07:05-06:00"
+    )
+
+
 def test_zone_abbreviations_must_be_readable_names() -> None:
-    with pytest.raises(UnrecognizedDatetimeError):
+    with pytest.raises(InvalidConfigurationError):
         _ = DatetimeNormalizer(zone_abbreviations={"my zone": UTC})
 
 
@@ -288,21 +308,139 @@ def test_to_utc() -> None:
     )
 
 
+@pytest.mark.parametrize("text", ["2024-01-05 13:05", "2024-01-05", "2024-01", "2024"])
+def test_naive_value_cannot_be_converted(text: str) -> None:
+    with pytest.raises(AmbiguousDatetimeError):
+        _ = NORMALIZER.normalize(text).to_time_zone("JST")
+    with pytest.raises(AmbiguousDatetimeError):
+        _ = NORMALIZER.normalize(text).to_utc()
+
+
+class _ZoneWithoutOffset(tzinfo):
+    @override
+    def utcoffset(self, dt: datetime | None) -> timedelta | None:
+        return None
+
+    @override
+    def dst(self, dt: datetime | None) -> timedelta | None:
+        return None
+
+    @override
+    def tzname(self, dt: datetime | None) -> str | None:
+        return None
+
+
+def test_target_without_an_offset_is_rejected() -> None:
+    with pytest.raises(InvalidDatetimeError):
+        _ = NORMALIZER.normalize("2024-01-05 13:05Z").to_time_zone(_ZoneWithoutOffset())
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "2024-01-05 10:00-11:00",
+        "2024/1/5 9:00-12:00",
+        "2024/1/5 10:00ー11:00",
+        "2024-01-05 10:00 -11:00",
+        "2024-01-05 13:00-15:00",
+        "2024-01-05 09-12",
+        "2024-01-05 1000-1100",
+        "2024年1月5日9時-12",
+        "2024年1月5日午前9時半-11:00",
+        "2024-01-05 10:00:00-11:00:00",
+        # A date alone, where the number may also be the next day
+        "2024-01-05-06",
+        "2024-01-05 -05:00",
+    ],
+)
+def test_text_that_may_be_a_range_is_rejected(text: str) -> None:
+    with pytest.raises(AmbiguousDatetimeError):
+        _ = NORMALIZER.normalize(text)
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("2024-01-05 13:05", "2024-01-05T22:05+09:00"),
-        ("2024-01-05", "2024-01-05T09+09:00"),
-        ("2024-01", "2024-01-01T09+09:00"),
-        ("2024", "2024-01-01T09+09:00"),
+        ("2024-01-05T10:00-11:00", "2024-01-05T10:00-11:00"),
+        ("20240105T1000-1100", "2024-01-05T10:00-11:00"),
+        ("2024-01-05 10:00:00-11:00", "2024-01-05T10:00:00-11:00"),
+        ("2024-01-05 10:00:00-05", "2024-01-05T10:00:00-05:00"),
+        ("2024-01-05 10:00:00.5-05:00", "2024-01-05T10:00:00.500000-05:00"),
+        ("2024-01-05 10:00 UTC-11:00", "2024-01-05T10:00-11:00"),
+        ("2024-01-05 10:00 GMT-5", "2024-01-05T10:00-05:00"),
+        ("2024-01-05 10:00-11:00[Pacific/Pago_Pago]", "2024-01-05T10:00-11:00"),
+        ("2024-01-05 10:00+11:00", "2024-01-05T10:00+11:00"),
     ],
 )
-def test_naive_value_is_converted_from_utc(text: str, expected: str) -> None:
-    assert NORMALIZER.normalize(text).to_time_zone("JST").isoformat() == expected
+def test_marked_negative_offsets_are_read(text: str, expected: str) -> None:
+    assert NORMALIZER.normalize(text).isoformat() == expected
 
 
-def test_naive_value_in_utc_stays_the_same_moment() -> None:
-    assert NORMALIZER.normalize("2024-01-05 13:05").to_utc().isoformat() == "2024-01-05T13:05+00:00"
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("2024-01-05 JST", "2024-01-04T15+00:00"),
+        ("2024-01-05 Asia/Tokyo", "2024-01-04T15+00:00"),
+        ("2024-01-05+09:00", "2024-01-04T15+00:00"),
+        ("2024-01-05 UTC-5", "2024-01-05T05+00:00"),
+        ("2024-01-05Z", "2024-01-05T00+00:00"),
+        ("2024年1月5日 日本時間", "2024-01-04T15+00:00"),
+        ("2024年1月5日(日本時間)", "2024-01-04T15+00:00"),
+        ("2024年1月5日(金)、日本時間", "2024-01-04T15+00:00"),
+        ("January 5, 2024 JST", "2024-01-04T15+00:00"),
+        ("2024-01-05-05:00[America/New_York]", "2024-01-05T05+00:00"),
+    ],
+)
+def test_time_zone_after_a_date(text: str, expected: str) -> None:
+    normalized: NormalizedDatetime = NORMALIZER.normalize(text)
+
+    assert normalized.is_timezone_aware
+    assert normalized.precision is DatetimePrecision.DAY
+    assert normalized.to_utc().isoformat() == expected
+
+
+def test_time_zone_after_a_date_takes_precedence_over_the_default() -> None:
+    assert NORMALIZER.normalize("2024-01-05 UTC", default_time_zone="JST").value == datetime(
+        2024, 1, 5, tzinfo=UTC
+    )
+
+
+def test_date_moved_by_its_time_zones_shows_the_time() -> None:
+    assert NORMALIZER.normalize("2024-01-05 +08:00[Asia/Tokyo]").isoformat() == (
+        "2024-01-05T01+09:00"
+    )
+
+
+@pytest.mark.parametrize("text", ["2024 JST", "2024-01 JST", "2024年1月 日本時間", "2024-01+09:00"])
+def test_time_zone_after_a_partial_date_is_rejected(text: str) -> None:
+    with pytest.raises(UnrecognizedDatetimeError):
+        _ = NORMALIZER.normalize(text)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("2024年1月5日、午後1時", "2024-01-05T13"),
+        ("2024年1月5日(金)、午後1時", "2024-01-05T13"),
+        ("January 5, 2024、13:05", "2024-01-05T13:05"),
+    ],
+)
+def test_japanese_comma_separates_a_date_from_a_time(text: str, expected: str) -> None:
+    assert NORMALIZER.normalize(text).isoformat() == expected
+
+
+def test_japanese_comma_does_not_hide_a_short_year() -> None:
+    with pytest.raises(AmbiguousDatetimeError):
+        _ = NORMALIZER.normalize("1月5日(金)、24", default_year=2024)
+
+
+def test_long_run_of_spaces_is_handled_quickly() -> None:
+    started: float = perf_counter()
+
+    with pytest.raises(UnrecognizedDatetimeError):
+        _ = NORMALIZER.normalize("2024" + " " * 200_000 + "x")
+
+    assert perf_counter() - started < 5
 
 
 @pytest.mark.parametrize(

@@ -18,9 +18,21 @@ the API.
   seconds, notes such as `+09:00[Asia/Tokyo]`, and before the time as in `日本時間午後1時`.
 - `DatetimeNormalizer(zone_abbreviations=...)` overrides the readings of time zone names.
 - Unix time in seconds and milliseconds is read as UTC.
+- A time zone can follow a date directly, as in `2024-01-05 JST`, and `、` separates a date from
+  a time.
 
 ### Changed
 
 - Time zone ambiguities no longer raise. Shared abbreviations such as `CST` mean the most common
-  zone, times skipped by daylight saving time move ahead, repeated ones are the earlier one, zones
-  that disagree are a conversion, and naive values convert from UTC.
+  zone, times skipped by daylight saving time move ahead, repeated ones are the earlier one, and
+  zones that disagree are a conversion.
+- Converting a naive value raises `AmbiguousDatetimeError` instead of assuming UTC.
+- A negative offset that may be the end of a range, as in `10:00-11:00`, raises
+  `AmbiguousDatetimeError`. A `T`, seconds, a prefix, or a note marks it as an offset.
+- An unusable key of `zone_abbreviations` raises `InvalidConfigurationError`.
+
+### Fixed
+
+- `to_time_zone` and `to_utc` read names with the `zone_abbreviations` of the normalizer.
+- A long run of spaces no longer makes normalizing take quadratic time.
+- `to_time_zone` raises `InvalidDatetimeError` for a `tzinfo` without an offset.

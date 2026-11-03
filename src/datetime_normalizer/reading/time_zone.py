@@ -5,7 +5,11 @@ from functools import cache
 from typing import ClassVar
 from zoneinfo import ZoneInfo, available_timezones
 
-from datetime_normalizer.errors import InvalidDatetimeError, UnrecognizedDatetimeError
+from datetime_normalizer.errors import (
+    InvalidConfigurationError,
+    InvalidDatetimeError,
+    UnrecognizedDatetimeError,
+)
 from datetime_normalizer.reading.text_canonicalizer import TextCanonicalizer
 
 
@@ -25,7 +29,7 @@ class TimeZoneReader:
 
     Raises
     ------
-    UnrecognizedDatetimeError
+    InvalidConfigurationError
         If a key of ``abbreviations`` cannot appear in text as a time zone name.
     """
 
@@ -41,7 +45,7 @@ class TimeZoneReader:
         r"(?:utc|gmt)?\s*(?P<sign>[-+])(?P<hour>\d{1,2})"
         + r"(?::?(?P<minute>\d{2})(?::?(?P<second>\d{2}))?)?"
     )
-    # The offsets in use. Anything beyond is more likely the end of a range: 13:00-15:00.
+    # The offsets in use.
     _MIN_OFFSET: ClassVar[timedelta] = timedelta(hours=-12)
     _MAX_OFFSET: ClassVar[timedelta] = timedelta(hours=14)
     _FIXED_ZONES: ClassVar[dict[str, timezone]] = {
@@ -168,7 +172,7 @@ class TimeZoneReader:
             name for name in self._abbreviations if not self._NAME_PATTERN.fullmatch(name)
         ]
         if invalid_names:
-            raise UnrecognizedDatetimeError(f"Not usable as time zone names: {invalid_names}")
+            raise InvalidConfigurationError(f"Not usable as time zone names: {invalid_names}")
 
     def resolve(self, time_zone: tzinfo | str) -> tzinfo:
         """
