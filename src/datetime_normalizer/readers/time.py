@@ -7,9 +7,9 @@ from datetime_normalizer.errors import (
     InvalidDatetimeError,
     UnrecognizedDatetimeError,
 )
-from datetime_normalizer.reading.meridiem import Meridiem
-from datetime_normalizer.reading.time_result import TimeReading
-from datetime_normalizer.reading.time_zone import TimeZoneReader
+from datetime_normalizer.notations import Meridiem
+from datetime_normalizer.readers.time_zone import TimeZoneReader
+from datetime_normalizer.results import TimeResult
 
 
 class TimeReader:
@@ -78,7 +78,7 @@ class TimeReader:
     def __init__(self, time_zone_reader: TimeZoneReader) -> None:
         self._time_zone_reader: TimeZoneReader = time_zone_reader
 
-    def read(self, text: str) -> TimeReading:
+    def read(self, text: str) -> TimeResult:
         """
         Read and validate a time.
 
@@ -89,7 +89,7 @@ class TimeReader:
 
         Returns
         -------
-        TimeReading
+        TimeResult
             The time. A fraction beyond microseconds is truncated.
 
         Raises
@@ -116,7 +116,7 @@ class TimeReader:
         second: int | None = int(second_text) if second_text else None
         if (minute or 0) > 59 or (second or 0) > 59:
             raise InvalidDatetimeError(f"Minute or second out of range in: {text}")
-        return TimeReading(
+        return TimeResult(
             hour=self._read_hour(groups),
             minute=minute,
             second=second,

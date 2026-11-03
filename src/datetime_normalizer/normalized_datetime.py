@@ -3,7 +3,7 @@ from datetime import UTC, datetime, tzinfo
 
 from datetime_normalizer.errors import AmbiguousDatetimeError, InvalidDatetimeError
 from datetime_normalizer.precision import DatetimePrecision
-from datetime_normalizer.reading import TimeZoneReader
+from datetime_normalizer.readers import TimeZoneReader
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +30,7 @@ class NormalizedDatetime:
     )
 
     @property
-    def is_timezone_aware(self) -> bool:
+    def is_time_zone_stated(self) -> bool:
         """Whether the text or the caller stated a time zone."""
         return self.value.utcoffset() is not None
 
@@ -62,7 +62,7 @@ class NormalizedDatetime:
             ``datetime`` there.
         """
         target: tzinfo = self.time_zone_reader.resolve(time_zone)
-        if not self.is_timezone_aware:
+        if not self.is_time_zone_stated:
             raise AmbiguousDatetimeError(
                 f"No time zone to convert from; set default_time_zone: {self.isoformat()}"
             )

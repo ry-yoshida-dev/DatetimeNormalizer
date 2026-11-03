@@ -1,8 +1,8 @@
-# tests/reading
+# tests/text
 
 ## Overview
 
-Unit tests of the reading steps whose rules are not fully exercised through the facade.
+Unit tests of the text steps whose rules are not fully exercised through the facade.
 
 ## Components
 

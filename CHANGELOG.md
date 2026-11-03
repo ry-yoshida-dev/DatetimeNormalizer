@@ -30,6 +30,10 @@ the API.
 - A negative offset that may be the end of a range, as in `10:00-11:00`, raises
   `AmbiguousDatetimeError`. A `T`, seconds, a prefix, or a note marks it as an offset.
 - An unusable key of `zone_abbreviations` raises `InvalidConfigurationError`.
+- `NormalizedDatetime.is_timezone_aware` is renamed to `is_time_zone_stated`.
+- `datetime_normalizer.reading` is split into `readers`, `results`, `text`, and `notations`, and
+  `datetime_normalizer.result` is renamed to `normalized_datetime`. Imports from
+  `datetime_normalizer` itself are unchanged.
 
 ### Fixed
 
@@ -37,3 +41,4 @@ the API.
 - A long run of spaces no longer makes normalizing take quadratic time.
 - `to_time_zone` raises `InvalidDatetimeError` for a `tzinfo` without an offset.
 - `Japan` is read on systems whose time zone database leaves out old IANA names.
+- A `default_year` out of range raises `InvalidDatetimeError` even when the text states a year.

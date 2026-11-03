@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
-class DateReading:
+class DateResult:
     """
     Validated date at the start of a text, and the text after it.
 

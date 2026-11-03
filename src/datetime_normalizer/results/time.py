@@ -3,7 +3,7 @@ from datetime import tzinfo
 
 
 @dataclass(frozen=True, slots=True)
-class TimeReading:
+class TimeResult:
     """
     Validated time of day.
 

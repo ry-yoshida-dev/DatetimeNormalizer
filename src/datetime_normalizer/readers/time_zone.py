@@ -10,7 +10,7 @@ from datetime_normalizer.errors import (
     InvalidDatetimeError,
     UnrecognizedDatetimeError,
 )
-from datetime_normalizer.reading.text_canonicalizer import TextCanonicalizer
+from datetime_normalizer.text import TextCanonicalizer
 
 
 class TimeZoneReader:

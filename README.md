@@ -68,7 +68,7 @@ Full-width characters, kanji numerals, spacing around units, and letter case are
 | 12-hour clock | `午後1時`, `午前9:30`, `1:30 PM`, `1 p.m.` |
 | Offset | `Z`, `+09:00`, `+0900`, `+9`, `UTC+9`, `GMT-05:00`, `+09:18:59` |
 | IANA time zone | `Asia/Tokyo`, `america/new_york`, `Etc/GMT+9`, `Japan` |
-| Abbreviation | `UTC`, `GMT`, `JST`, `KST`, `HKT`, `SGT`, `EST`, `EDT`, `PDT`, `CET`, `CEST`, `AEST`, `NZST`, and others in [time_zone.py](src/datetime_normalizer/reading/time_zone.py); `ET`, `CT`, `MT`, `PT` |
+| Abbreviation | `UTC`, `GMT`, `JST`, `KST`, `HKT`, `SGT`, `EST`, `EDT`, `PDT`, `CET`, `CEST`, `AEST`, `NZST`, and others in [time_zone.py](src/datetime_normalizer/readers/time_zone.py); `ET`, `CT`, `MT`, `PT` |
 | Japanese time zone | `日本時間`, `日本標準時`, `協定世界時`, `世界標準時`, `世界時`, `世界時間`, `グリニッジ標準時`, `東部標準時`, `米国東部時間`, `ロンドン時間`, `シンガポール時間` |
 | Zone before the time | `日本時間午後1時`, `(日本時間)13:05`, `UTC 13:05` |
 | Unix time | `1704427200`, `1704427200.5`, `1704427200000` (milliseconds); always UTC |
@@ -157,7 +157,8 @@ Some of these rules are less obvious:
 - **Two 12-hour markers**, as in `午前1:30 PM`, are rejected, even when they agree.
 - **`default_year`** is only used when the text states no year, and the date is validated in
   that year: `2月29日` needs a leap year, and `1月5日(月)` must fall on a Monday in it. The year
-  is not inferred from the date or the current time.
+  is not inferred from the date or the current time. A `default_year` outside 1 to 9999 raises
+  `InvalidDatetimeError`, whatever the text states.
 - **A lone number after a date without a year** is rejected, as in `5 Jan 24` and `5 Jan 24 JST`, where 24 may be
   a short year rather than an hour. Write the hour with a unit or minutes: `5 Jan 24:00`.
 - **Slash dates without a year** are the only numeric form accepted, because `1-5` and `1.5` are

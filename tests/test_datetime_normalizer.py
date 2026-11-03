@@ -159,8 +159,8 @@ def test_time_zone_is_kept_only_when_stated(normalizer: DatetimeNormalizer) -> N
     naive: NormalizedDatetime = normalizer.normalize("2024-01-05 13:05")
     aware: NormalizedDatetime = normalizer.normalize("2024-01-05 13:05 JST")
 
-    assert not naive.is_timezone_aware
-    assert aware.is_timezone_aware
+    assert not naive.is_time_zone_stated
+    assert aware.is_time_zone_stated
     assert aware.value.tzinfo == timezone(timedelta(hours=9))
 
 
@@ -338,6 +338,15 @@ def test_unclear_text_without_a_year_is_rejected(normalizer: DatetimeNormalizer,
     ],
 )
 def test_impossible_date_with_default_year_is_rejected(
+    normalizer: DatetimeNormalizer, text: str, default_year: int
+) -> None:
+    with pytest.raises(InvalidDatetimeError):
+        _ = normalizer.normalize(text, default_year=default_year)
+
+
+@pytest.mark.parametrize("default_year", [0, 10000])
+@pytest.mark.parametrize("text", ["1月5日", "2024-01-05", "1704427200"])
+def test_default_year_out_of_range_is_rejected_for_any_text(
     normalizer: DatetimeNormalizer, text: str, default_year: int
 ) -> None:
     with pytest.raises(InvalidDatetimeError):

@@ -120,8 +120,8 @@ def test_time_zone_notations(text: str, expected: str) -> None:
     ],
 )
 def test_every_japanese_name_is_readable(name: str) -> None:
-    assert NORMALIZER.normalize(f"2024年1月5日13時 {name}").is_timezone_aware
-    assert NORMALIZER.normalize(f"2024年1月5日 {name} 13時").is_timezone_aware
+    assert NORMALIZER.normalize(f"2024年1月5日13時 {name}").is_time_zone_stated
+    assert NORMALIZER.normalize(f"2024年1月5日 {name} 13時").is_time_zone_stated
 
 
 @pytest.mark.parametrize(
@@ -394,7 +394,7 @@ def test_marked_negative_offsets_are_read(text: str, expected: str) -> None:
 def test_time_zone_after_a_date(text: str, expected: str) -> None:
     normalized: NormalizedDatetime = NORMALIZER.normalize(text)
 
-    assert normalized.is_timezone_aware
+    assert normalized.is_time_zone_stated
     assert normalized.precision is DatetimePrecision.DAY
     assert normalized.to_utc().isoformat() == expected
 
@@ -488,7 +488,7 @@ def test_default_time_zone(text: str, expected: str) -> None:
 def test_default_time_zone_converts_a_date_from_its_zone() -> None:
     normalized: NormalizedDatetime = NORMALIZER.normalize("2024-01-05", default_time_zone="JST")
 
-    assert normalized.is_timezone_aware
+    assert normalized.is_time_zone_stated
     assert normalized.to_utc().isoformat() == "2024-01-04T15+00:00"
 
 

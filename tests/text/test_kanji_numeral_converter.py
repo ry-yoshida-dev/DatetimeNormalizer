@@ -1,6 +1,6 @@
 import pytest
 
-from datetime_normalizer.reading import KanjiNumeralConverter
+from datetime_normalizer.text import KanjiNumeralConverter
 
 
 @pytest.mark.parametrize(

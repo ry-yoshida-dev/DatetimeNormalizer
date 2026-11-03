@@ -3,14 +3,13 @@ from calendar import monthrange
 from datetime import date
 from typing import ClassVar
 
-from datetime_normalizer.date_order import DateOrder
 from datetime_normalizer.errors import (
     AmbiguousDatetimeError,
     InvalidDatetimeError,
     UnrecognizedDatetimeError,
 )
-from datetime_normalizer.reading.date_result import DateReading
-from datetime_normalizer.reading.japanese_era import JapaneseEra
+from datetime_normalizer.notations import DateOrder, JapaneseEra
+from datetime_normalizer.results import DateResult
 
 
 class DateReader:
@@ -88,7 +87,7 @@ class DateReader:
     def __init__(self, date_order: DateOrder | None = None) -> None:
         self._date_order: DateOrder | None = date_order
 
-    def read(self, text: str, default_year: int | None = None) -> DateReading:
+    def read(self, text: str, default_year: int | None = None) -> DateResult:
         """
         Read and validate a date.
 
@@ -102,7 +101,7 @@ class DateReader:
 
         Returns
         -------
-        DateReading
+        DateResult
             The date and the text after it.
 
         Raises
@@ -130,7 +129,7 @@ class DateReader:
         year: int = self._read_year(groups, default_year, text)
         self._validate(year, month, day)
         self._validate_era(groups.get("era"), year, month, day)
-        return DateReading(year=year, month=month, day=day, rest=rest)
+        return DateResult(year=year, month=month, day=day, rest=rest)
 
     def _read_month_and_day(
         self, groups: dict[str, str | None], text: str

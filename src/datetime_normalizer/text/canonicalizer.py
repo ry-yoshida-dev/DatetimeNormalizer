@@ -2,7 +2,7 @@ import re
 import unicodedata
 from typing import ClassVar
 
-from datetime_normalizer.reading.kanji_numeral_converter import KanjiNumeralConverter
+from datetime_normalizer.text.kanji_numeral_converter import KanjiNumeralConverter
 
 
 class TextCanonicalizer:

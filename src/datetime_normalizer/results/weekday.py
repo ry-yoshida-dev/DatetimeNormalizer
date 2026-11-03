@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
-class WeekdayExtraction:
+class WeekdayResult:
     """
     Text split into its stated weekday and everything else.
 

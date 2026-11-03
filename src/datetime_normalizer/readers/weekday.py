@@ -2,10 +2,10 @@ import re
 from calendar import Day
 from typing import ClassVar
 
-from datetime_normalizer.reading.weekday_extraction import WeekdayExtraction
+from datetime_normalizer.results import WeekdayResult
 
 
-class WeekdayExtractor:
+class WeekdayReader:
     """Take the weekday out of canonical text, in Japanese or in English."""
 
     _KANJI: ClassVar[str] = "[月火水木金土日]"
@@ -34,7 +34,7 @@ class WeekdayExtractor:
     }
 
     @classmethod
-    def extract(cls, text: str) -> WeekdayExtraction:
+    def read(cls, text: str) -> WeekdayResult:
         """
         Split the first weekday from a text.
 
@@ -45,12 +45,12 @@ class WeekdayExtractor:
 
         Returns
         -------
-        WeekdayExtraction
+        WeekdayResult
             The rest of the text and the weekday.
         """
         match: re.Match[str] | None = cls._PATTERN.search(text)
         if match is None:
-            return WeekdayExtraction(text=text, weekday=None)
+            return WeekdayResult(text=text, weekday=None)
         token: str = "".join(group for group in match.groups() if group)
         rest: str = f"{text[: match.start()]} {text[match.end() :]}".strip()
-        return WeekdayExtraction(text=rest, weekday=cls._WEEKDAYS[token[:3]])
+        return WeekdayResult(text=rest, weekday=cls._WEEKDAYS[token[:3]])
