@@ -2,10 +2,7 @@
 
 ## Overview
 
-Readers of canonical text. `WeekdayReader` takes out the weekday, `DateReader` reads the date at the
-start, and `TimeReader` reads everything after it, using `TimeZoneReader` for time zones. Readers
-match whole notations with regular expressions, so text that fits no notation fails instead of
-being guessed at.
+Readers of canonical text: the weekday, the date at the start, and the time and time zones after it.
 
 ## Components
 
